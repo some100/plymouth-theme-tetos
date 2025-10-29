@@ -1,0 +1,219 @@
+// the position of the progress bar relative to the borders of the image.
+PROGRESS_BAR_X = 0.313;
+PROGRESS_BAR_Y = 0.906;
+PROGRESS_BAR_W = 0.38;
+PROGRESS_BAR_H = 0.04;
+
+TILES_PER_ROW = 12;
+TILES_PER_COL = 8;
+
+screen.x = Window.GetX();
+screen.y = Window.GetY();
+screen.w = Window.GetWidth(0);
+screen.h = Window.GetHeight(0);
+
+mode = Plymouth.GetMode();
+
+raw_dialog_blank = Image("dialog-blank.png");
+raw_dialog_password = Image("dialog-password.png");
+raw_dialog_part1 = Image("dialog-1.png");
+raw_dialog_part2 = Image("dialog-2.png");
+raw_progress = Image("progress.png");
+raw_background_tile = Image("background-tile.png");
+
+raw_firmware_upgrade = Image("firmware-upgrade.png");
+raw_reboot = Image("reboot.png");
+raw_shutdown = Image("shutdown.png");
+raw_system_reset = Image("system-reset.png");
+raw_system_upgrade = Image("system-upgrade.png");
+raw_updates = Image("updates.png");
+
+image.w = raw_dialog_blank.GetWidth();
+image.h = raw_dialog_blank.GetHeight();
+
+scale = Math.Min(screen.w / 3 / image.w, screen.h / 3 / image.h);
+
+background_sprites = null;
+bullet_sprites = null;
+
+dialog_blank = raw_dialog_blank.Scale(image.w * scale, image.h * scale);
+dialog_password = raw_dialog_password.Scale(image.w * scale, image.h * scale);
+dialog_part1 = raw_dialog_part1.Scale(image.w * scale, image.h * scale);
+dialog_part2 = raw_dialog_part2.Scale(image.w * scale, image.h * scale);
+firmware_upgrade = raw_firmware_upgrade.Scale(image.w * scale, image.h * scale);
+reboot = raw_reboot.Scale(image.w * scale, image.h * scale);
+shutdown = raw_shutdown.Scale(image.w * scale, image.h * scale);
+system_reset = raw_system_reset.Scale(image.w * scale, image.h * scale);
+system_upgrade = raw_system_upgrade.Scale(image.w * scale, image.h * scale);
+updates = raw_updates.Scale(image.w * scale, image.h * scale);
+
+dialog_sprite = Sprite();
+dialog_sprite.SetPosition(
+	screen.x + (screen.w / 2 - image.w * scale / 2),
+	screen.y + (screen.h / 2 - image.h * scale / 2),
+	0
+);
+
+progress_width = dialog_blank.GetWidth() * PROGRESS_BAR_W;
+progress_height = dialog_blank.GetHeight() * PROGRESS_BAR_H;
+
+progress_sprite = Sprite();
+progress_sprite.SetPosition(
+	PROGRESS_BAR_X * dialog_blank.GetWidth() + dialog_sprite.GetX(),
+	PROGRESS_BAR_Y * dialog_blank.GetHeight() + dialog_sprite.GetY(),
+	10
+);
+
+prompt_sprite = Sprite();
+prompt_sprite.SetPosition(
+	PROGRESS_BAR_X * dialog_blank.GetWidth() + dialog_sprite.GetX(),
+	PROGRESS_BAR_Y * dialog_blank.GetHeight() + dialog_sprite.GetY(),
+	10
+);
+prompt_sprite.SetOpacity(0);
+
+background_tile = raw_background_tile.Scale(screen.w / TILES_PER_ROW, screen.h / TILES_PER_COL);
+
+Window.SetBackgroundTopColor(0.2106, 0.2106, 0.2106);
+Window.SetBackgroundBottomColor(0.2106, 0.2106, 0.2106);
+
+background_tiled = 0;
+reset_time = 0;
+state = "run";
+time_offset = 0;
+
+fun progress_callback(time, progress)
+{
+	if (reset_time == 1) { // if for example a password prompt appeared, reset time so that the first part may appear again
+		time_offset = time;
+		reset_time = 0;
+	}
+
+	if (state == "run") {
+		if (mode == "boot" && time - time_offset >= 2) {
+			dialog_sprite.SetImage(dialog_part2);
+
+			progress_bar(progress);
+			tile_background();
+			return;
+		} else if (mode == "updates" || mode == "system-upgrade" || mode == "firmware-upgrade" || mode == "system-reset") {
+			progress_bar(progress);
+			tile_background();
+		}
+		select_dialog();
+	}
+}
+
+Plymouth.SetBootProgressFunction(progress_callback);
+
+fun normal_callback()
+{
+	state = "run";
+	bullet_sprites = null;
+	reset_time = 1;
+	untile_background();
+}
+
+Plymouth.SetDisplayNormalFunction(normal_callback);
+
+fun password_callback(prompt, bullets)
+{
+	untile_background();
+	state = "password";
+	progress_sprite.SetOpacity(0);
+
+	dialog_sprite.SetImage(dialog_password);
+
+	bullet_image = Image.Text("*");
+	bullet_sprites = null;
+
+	startPos = screen.w / 2 - bullets * bullet_image.GetWidth() / 2;
+
+	for (i = 0; i < bullets; ++i) {
+		bullet_sprites[i] = Sprite(bullet_image);
+		bullet_sprites[i].SetPosition(
+			startPos + i * bullet_image.GetWidth(),
+			PROGRESS_BAR_Y * dialog_blank.GetHeight() + dialog_sprite.GetY(),
+			1
+		);
+	}
+}
+
+Plymouth.SetDisplayPasswordFunction(password_callback);
+
+fun message_callback(msg)
+{
+	prompt_sprite.SetOpacity(1);
+
+	message_image = Image.Text(msg, 0.0, 0.0, 0.0, 1.0, "Monospace 12");
+	
+	dialog_w = dialog_blank.GetWidth();
+	dialog_h = dialog_blank.GetHeight();
+	
+	progress_bottom_y = PROGRESS_BAR_Y * dialog_blank.GetHeight() + progress_height;
+	available_height = dialog_h + progress_bottom_y + (dialog_h * 0.05);
+
+	scale_w = (dialog_w * 0.9) / message_image.GetWidth();
+	scale_h = available_height / message_image.GetHeight();
+
+	scale_factor = Math.Min(0.9, Math.Min(scale_w, scale_h));
+	message_image = message_image.Scale(scale_factor * message_image.GetWidth(), scale_factor * message_image.GetHeight());
+
+	prompt_sprite.SetImage(message_image);
+	prompt_sprite.SetX(dialog_sprite.GetX() + (dialog_blank.GetWidth() - message_image.GetWidth()) / 2);
+
+	prompt_sprite.SetY(PROGRESS_BAR_Y * dialog_blank.GetHeight() + dialog_sprite.GetY() + progress_height);
+}
+
+Plymouth.SetMessageFunction(message_callback);
+
+fun select_dialog()
+{
+	if (mode == "boot")
+		dialog_sprite.SetImage(dialog_part1);
+	else if (mode == "shutdown")
+		dialog_sprite.SetImage(shutdown);
+	else if (mode == "reboot")
+		dialog_sprite.SetImage(reboot);
+	else if (mode == "updates")
+		dialog_sprite.SetImage(updates);
+	else if (mode == "system-upgrade")
+		dialog_sprite.SetImage(system_upgrade);
+	else if (mode == "firmware-upgrade")
+		dialog_sprite.SetImage(firmware_upgrade);
+	else if (mode == "system-reset")
+		dialog_sprite.SetImage(system_reset);
+	else if (mode == "unknown")
+		dialog_sprite.SetImage(dialog_part1);
+}
+
+fun progress_bar(progress)
+{
+	progress_sprite.SetOpacity(1);
+
+	progress_image = raw_progress.Scale(progress_width * progress, progress_height);
+	progress_sprite.SetImage(progress_image);
+}
+
+fun tile_background()
+{
+	if (background_tiled == 0) {
+		for (y = 0; y < TILES_PER_COL; ++y) {
+			for (x = 0; x < TILES_PER_ROW; ++x) {
+				background_sprites[x][y] = Sprite(background_tile);
+				background_sprites[x][y].SetPosition(
+					x * (screen.w / TILES_PER_ROW), 
+					y * (screen.h / TILES_PER_COL),
+					-1
+				);
+			}
+		}
+		background_tiled = 1;
+	}
+}
+
+fun untile_background()
+{
+	background_sprites = null;
+	background_tiled = 0;
+}

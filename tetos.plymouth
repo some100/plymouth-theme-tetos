@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=tetos
+Description=display the tetos boot screen from machine love (or more generally a stylized variant of the mac os 8 boot screen)
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/tetos/images
+ScriptFile=/usr/share/plymouth/themes/tetos/tetos.script
